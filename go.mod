@@ -1,4 +1,4 @@
-module git.musta.ch/sunli-beatteay/kubectl-koptica
+module github.com/sunny-b/kubectl-koptica
 
 go 1.18
 
