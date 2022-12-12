@@ -1,4 +1,4 @@
-module github.com/ahmetb/kubectl-foreach
+module git.musta.ch/sunli-beatteay/kubectl-koptica
 
 go 1.18
 

@@ -1,4 +1,4 @@
-# kubectl foreach
+# kubectl koptica
 
 Run a `kubectl` command in one or more contexts (clusters) in parallel
 (similar to GNU parallel/xargs).
@@ -6,8 +6,7 @@ Run a `kubectl` command in one or more contexts (clusters) in parallel
 ## Usage
 
 ```text
-Usage:
-    kubectl foreach [OPTIONS] [PATTERN]... -- [KUBECTL_ARGS...]
+    kubectl koptica [OPTIONS] [PATTERN]... -- [KUBECTL_ARGS...]
 
 Patterns can be used to match context names from kubeconfig:
       (empty): matches all contexts
@@ -19,7 +18,9 @@ Patterns can be used to match context names from kubeconfig:
 Options:
     -c=NUM     Limit parallel executions (default: 0, unlimited)
     -I=VAL     Replace VAL occurring in KUBECTL_ARGS with context name
-    -q         Disable and accept confirmation prompts ($KUBECTL_FOREACH_DISABLE_PROMPTS) 
+    -q         Suppress output
+    -y         Disable and accept confirmation prompts ($KUBECTL_KOPTICA_DISABLE_PROMPTS) 
+    -l         Display kube contexts matching the query and exit
     -h/--help  Print help
 ```
 
@@ -28,7 +29,7 @@ Options:
 Query a pod by label in `minikube` and `*-prod*` contexts:
 
 ```text
-$ kubectl foreach /-prod/ minikube -- get pods -n kube-system --selector compute.twitter.com/app=coredns --no-headers
+$ kubectl koptica /-prod/ minikube -- get pods -n kube-system --selector compute.twitter.com/app=coredns --no-headers
 
      eu-prod | coredns-59bd9867bb-6rbx7   2/2     Running   0          78d
      eu-prod | coredns-59bd9867bb-9xczh   2/2     Running   0          78d
@@ -48,20 +49,20 @@ $ kubectl foreach /-prod/ minikube -- get pods -n kube-system --selector compute
 and `c3`:
 
 ```sh
-kubectl foreach c1 c2 c3 -- version
+kubectl koptica c1 c2 c3 -- version
 ```
 
 **Match to contexts by pattern:** Run a command on contexts starting with `gke`
 (regular expression syntax):
 
 ```sh
-kubectl foreach /^gke/ -- get pods
+kubectl koptica /^gke/ -- get pods
 ```
 
 **Match all contexts:** empty context matches all contexts.
 
 ```sh
-kubectl foreach -- version
+kubectl koptica -- version
 ```
 
 **Excluding contexts:** Use the matching syntaxes with a `^` prefix to use them
@@ -71,7 +72,7 @@ e.g. match all contexts **except** `c1` and except those ending
 with `prod` (single quotes for escaping `$` in the shell):
 
 ```shell
-kubectl foreach ^c1 ^/prod'$'/ -- version
+kubectl koptica ^c1 ^/prod'$'/ -- version
 ```
 
 **Using with kubectl plugins:** Customize how context name is passed to the command
@@ -81,26 +82,13 @@ In this example, `_` is replaced with the context name when calling "kubectl
 my_plugin".
 
 ```shell
-kubectl foreach -I _ -- my_plugin -ctx=_
+kubectl koptica -I _ -- my_plugin -ctx=_
 ```
 
 **Limit parallelization:** Only run 3 commands at a time:
 
 ```
-kubectl foreach -c 3 /^gke-/
-```
-
-## Install
-
-Use [Krew](https://krew.sigs.k8s.io/) kubectl plugin manager:
-
-```shell
-kubectl krew install foreach
-```
-
-You can also build from source but you won't receive new version updates:
-```
-go install github.com/ahmetb/kubectl-foreach@latest
+kubectl koptica -c 3 /^gke-/
 ```
 
 ## Remarks

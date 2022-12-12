@@ -21,29 +21,30 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/jwalton/gchalk"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"log"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strings"
-
-	"github.com/jwalton/gchalk"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
-	envDisablePrompts = `KUBECTL_FOREACH_DISABLE_PROMPTS`
+	envDisablePrompts = `KUBECTL_KOPTICA_DISABLE_PROMPTS`
 )
 
 var (
 	gray = gchalk.Stderr.Gray
 	red  = gchalk.Stderr.Red
 
-	fl      = flag.NewFlagSet("kubectl foreach", flag.ContinueOnError)
-	repl    = fl.String("I", "", "string to replace in cmd args with context name (like xargs -I)")
-	workers = fl.Int("c", 0, "parallel runs (default: as many as matched contexts)")
-	quiet   = fl.Bool("q", false, "accept confirmation prompts")
+	fl               = flag.NewFlagSet("kubectl koptica", flag.ContinueOnError)
+	repl             = fl.String("I", "", "string to replace in cmd args with context name (like xargs -I)")
+	workers          = fl.Int("c", 0, "parallel runs (default: as many as matched contexts)")
+	quiet            = fl.Bool("q", false, "suppress output")
+	yes              = fl.Bool("y", false, "accept confirmation prompts")
+	kubeContextsOnly = fl.Bool("l", false, "only list matching kube contexts")
 )
 
 func printErrAndExit(msg string) {
@@ -53,7 +54,7 @@ func printErrAndExit(msg string) {
 
 func printUsage(w io.Writer) {
 	_, _ = fmt.Fprint(w, `Usage:
-    kubectl foreach [OPTIONS] [PATTERN]... -- [KUBECTL_ARGS...]
+    kubectl koptica [OPTIONS] [PATTERN]... -- [KUBECTL_ARGS...]
 
 Patterns can be used to match context names from kubeconfig:
       (empty): matches all contexts
@@ -65,21 +66,26 @@ Patterns can be used to match context names from kubeconfig:
 Options:
     -c=NUM     Limit parallel executions (default: 0, unlimited)
     -I=VAL     Replace VAL occurring in KUBECTL_ARGS with context name
-    -q         Disable and accept confirmation prompts ($KUBECTL_FOREACH_DISABLE_PROMPTS) 
+    -q         Suppress output
+    -y         Disable and accept confirmation prompts ($KUBECTL_KOPTICA_DISABLE_PROMPTS) 
+    -l         Display kube contexts matching the query and exit
     -h/--help  Print help
 
 Examples:
     # get nodes on contexts named a b c
-    kubectl foreach a b c -- get nodes 
+    kubectl koptica a b c -- get nodes 
 
     # get nodes on all contexts named c0..9 except c1 (note the escaping)
-    kubectl foreach '/^c[0-9]/' ^c1	 -- get nodes
+    kubectl koptica '/^c[0-9]/' ^c1	 -- get nodes
 
     # get nodes on all contexts that has "prod" but not "foo"
-    kubectl foreach /prod/ ^/foo/ -- get nodes
+    kubectl koptica /prod/ ^/foo/ -- get nodes
 
     # use 'kubectl tail' plugin to follow logs of pods in contexts named *test*
-    kubectl foreach -I _ /test/ -- tail --context=_ -l app=foo`+"\n")
+    kubectl koptica -I _ /test/ -- tail --context=_ -l app=foo
+
+    # use 'find' to find the contexts for a given k8s resource
+    kubectl koptica /test/ -- find svc prometheus -n prometheus`+"\n")
 	os.Exit(0)
 }
 
@@ -135,21 +141,24 @@ func main() {
 		printErrAndExit("query matched no contexts from kubeconfig")
 	}
 
-	fmt.Fprintln(os.Stderr, "Will run command in context(s):")
-	for _, c := range ctxMatches {
-		fmt.Fprintf(os.Stderr, "%s", gray(fmt.Sprintf("  - %s\n", c)))
-	}
-	if !*quiet && os.Getenv(envDisablePrompts) == "" {
-		fmt.Fprintf(os.Stderr, "Continue? [Y/n]: ")
-		if err := prompt(ctx, os.Stdin); err != nil {
-			printErrAndExit(err.Error())
+	if !*quiet && kubectlArgs[0] != "find" {
+		fmt.Fprintln(os.Stderr, "Will run command in context(s):")
+		for _, c := range ctxMatches {
+			fmt.Fprintf(os.Stderr, "%s", gray(fmt.Sprintf("  - %s\n", c)))
+		}
+
+		if !*yes && os.Getenv(envDisablePrompts) == "" {
+			fmt.Fprintf(os.Stderr, "Continue? [Y/n]: ")
+			if err := prompt(ctx, os.Stdin); err != nil {
+				printErrAndExit(err.Error())
+			}
 		}
 	}
 
 	syncOut := &synchronizedWriter{Writer: os.Stdout}
 	syncErr := &synchronizedWriter{Writer: os.Stderr}
 
-	err = runAll(ctx, ctxMatches, replaceArgs(kubectlArgs, *repl), syncOut, syncErr)
+	err = runAll(ctx, ctxMatches, replaceArgs(kubectlArgs, *repl), syncOut, syncErr, *kubeContextsOnly)
 	if err != nil {
 		printErrAndExit(err.Error())
 	}
@@ -184,7 +193,7 @@ func kubeContexts(ctx context.Context) ([]string, error) {
 	return strings.Split(strings.TrimSpace(b.String()), "\n"), nil
 }
 
-func runAll(ctx context.Context, kubeCtxs []string, argMaker func(string) ([]string, error), stdout, stderr io.Writer) error {
+func runAll(ctx context.Context, kubeCtxs []string, argMaker func(string) ([]string, error), stdout, stderr io.Writer, kubeContextsOnly bool) error {
 	n := len(kubeCtxs)
 	if *workers > 0 {
 		n = *workers
@@ -211,6 +220,11 @@ func runAll(ctx context.Context, kubeCtxs []string, argMaker func(string) ([]str
 			if err != nil {
 				return err
 			}
+			if args[1] == "find" || kubeContextsOnly {
+				args[1] = "get"
+				return runFind(ctx, args, kctx)
+			}
+
 			return run(ctx, args, wo, we)
 		})
 	}
@@ -234,13 +248,41 @@ func run(ctx context.Context, args []string, stdout, stderr io.WriteCloser) (err
 			log.Printf("WARN: failed to close stdout: %v", err)
 		}
 		if err := stderr.Close(); err != nil {
-			log.Printf("WARN: failed to close stdout: %v", err)
+			log.Printf("WARN: failed to close stderr: %v", err)
 		}
 	}()
 	cmd := exec.CommandContext(ctx, "kubectl", args...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	return cmd.Run()
+}
+
+func runFind(ctx context.Context, args []string, kubeContext string) (err error) {
+	out, er := bufio.NewWriter(new(bytes.Buffer)), bufio.NewWriter(new(bytes.Buffer))
+	stdout, stderr := &synchronizedWriter{Writer: out}, &synchronizedWriter{Writer: bufio.NewWriter(er)}
+
+	args[1] = "get"
+
+	cmd := exec.CommandContext(ctx, "kubectl", args...)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+
+	if err := cmd.Run(); err != nil {
+		//once.Do(func() {
+		//	fmt.Fprintf(os.Stderr, "Failed to run find command: %s\n", err.Error())
+		//})
+
+		//return err
+		return nil
+	}
+
+	out.Flush()
+
+	if out.Size() != 0 {
+		fmt.Fprintf(os.Stdout, "%s\n", kubeContext)
+	}
+
+	return
 }
 
 // prompt returns an error if user rejects or if ctx cancels.

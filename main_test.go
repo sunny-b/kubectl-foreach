@@ -35,7 +35,6 @@ func TestTrimSuffix(t *testing.T) {
 	assert.Equal(t, []string{"a"}, trimSuffix([]string{"a"}, []string{"a", "b"}))
 	assert.Equal(t, []string{"a", "b"}, trimSuffix([]string{"a", "b", "c"}, []string{"c"}))
 	assert.Equal(t, []string{"a"}, trimSuffix([]string{"a", "b", "c"}, []string{"b", "c"}))
-
 }
 
 func TestPrompt(t *testing.T) {
@@ -79,7 +78,6 @@ type blockingReader struct{ close <-chan struct{} }
 func (b blockingReader) Read(p []byte) (n int, err error) {
 	<-b.close
 	return 0, errors.New("reader closed")
-
 }
 
 func Test_replaceArgs(t *testing.T) {

@@ -31,37 +31,56 @@ func Test_matchContexts(t *testing.T) {
 		args args
 		want []string
 	}{
-		{name: "empty input",
+		{
+			name: "empty input",
 			args: args{
 				in: nil,
-				f:  []filter{exact("foo")}},
-			want: nil},
-		{name: "empty filters match all",
+				f:  []filter{exact("foo")},
+			},
+			want: nil,
+		},
+		{
+			name: "empty filters match all",
 			args: args{
 				in: []string{"a", "b", "c"},
-				f:  []filter{}},
-			want: []string{"a", "b", "c"}},
-		{name: "only additive patterns",
+				f:  []filter{},
+			},
+			want: []string{"a", "b", "c"},
+		},
+		{
+			name: "only additive patterns",
 			args: args{
 				in: []string{"a", "b", "c"},
-				f:  []filter{exact("a"), pattern{regexp.MustCompile("^c")}}},
-			want: []string{"a", "c"}},
-		{name: "only additive patterns no results",
+				f:  []filter{exact("a"), pattern{regexp.MustCompile("^c")}},
+			},
+			want: []string{"a", "c"},
+		},
+		{
+			name: "only additive patterns no results",
 			args: args{
 				in: []string{"a", "b", "c"},
-				f:  []filter{exact("d"), pattern{regexp.MustCompile("^e")}}},
-			want: nil},
-		{name: "only excluding patterns",
+				f:  []filter{exact("d"), pattern{regexp.MustCompile("^e")}},
+			},
+			want: nil,
+		},
+		{
+			name: "only excluding patterns",
 			args: args{
 				in: []string{"a", "b", "c"},
-				f:  []filter{exclude{exact("b")}, exclude{exact("d")}}},
-			want: []string{"a", "c"}},
-		{name: "only excluding patterns no results",
+				f:  []filter{exclude{exact("b")}, exclude{exact("d")}},
+			},
+			want: []string{"a", "c"},
+		},
+		{
+			name: "only excluding patterns no results",
 			args: args{
 				in: []string{"a", "b", "c"},
-				f:  []filter{exclude{pattern{regexp.MustCompile(`^`)}}}},
-			want: nil},
-		{name: "mixed patterns",
+				f:  []filter{exclude{pattern{regexp.MustCompile(`^`)}}},
+			},
+			want: nil,
+		},
+		{
+			name: "mixed patterns",
 			args: args{
 				in: []string{"a", "b", "c", "d", "e"},
 				f: []filter{
@@ -70,8 +89,10 @@ func Test_matchContexts(t *testing.T) {
 					exclude{exact("b")},
 					exclude{exact("e")},
 					pattern{regexp.MustCompile("^[cde]")},
-				}},
-			want: []string{"a", "c", "d"}},
+				},
+			},
+			want: []string{"a", "c", "d"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

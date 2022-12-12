@@ -30,32 +30,46 @@ func Test_parseFilter(t *testing.T) {
 		want    filter
 		wantErr require.ErrorAssertionFunc
 	}{
-		{name: "empty spec",
+		{
+			name:    "empty spec",
 			in:      "",
-			wantErr: require.Error},
-		{name: "exact match",
+			wantErr: require.Error,
+		},
+		{
+			name:    "exact match",
 			in:      "foo",
 			want:    exact("foo"),
-			wantErr: require.NoError},
-		{name: "exact match inverted",
+			wantErr: require.NoError,
+		},
+		{
+			name:    "exact match inverted",
 			in:      "^foo",
 			want:    exclude{exact("foo")},
-			wantErr: require.NoError},
-		{name: "pattern",
+			wantErr: require.NoError,
+		},
+		{
+			name:    "pattern",
 			in:      "/re/",
 			want:    pattern{regexp.MustCompile("re")},
-			wantErr: require.NoError},
-		{name: "pattern missing trailing slash",
+			wantErr: require.NoError,
+		},
+		{
+			name:    "pattern missing trailing slash",
 			in:      "/re",
 			want:    exact("/re"),
-			wantErr: require.NoError},
-		{name: "pattern parse error",
+			wantErr: require.NoError,
+		},
+		{
+			name:    "pattern parse error",
 			in:      "/re(/",
-			wantErr: require.Error},
-		{name: "pattern inverted",
+			wantErr: require.Error,
+		},
+		{
+			name:    "pattern inverted",
 			in:      "^/re/",
 			want:    exclude{pattern{regexp.MustCompile("re")}},
-			wantErr: require.NoError},
+			wantErr: require.NoError,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
